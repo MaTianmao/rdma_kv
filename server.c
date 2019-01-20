@@ -79,6 +79,7 @@ struct config_t config = {
 struct hashtable{
 	int exist[HT_SIZE];
 	int location[HT_SIZE];
+	int len[HT_SIZE];
 	char key[HT_SIZE][MAX_KEY];
 };
 const int total_size = 1024 * 1024;

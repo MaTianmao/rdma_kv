@@ -68,6 +68,7 @@ struct resources {
 struct hashtable{
 	int exist[HT_SIZE];
 	int location[HT_SIZE];
+	int len[HT_SIZE];
 	char key[HT_SIZE][MAX_KEY];
 };
 const int total_size = 1024 * 1024;
@@ -548,6 +549,85 @@ int cal_hash_index(char *s){
 	return ret;
 }
 
+int put(struct resources * res, char *key, char *value){
+	//read index
+	post_read(res, 0);
+	if (poll_completion(res)) {
+		fprintf(stderr, "poll completion failed\n");
+		return 1;
+	}
+	fprintf(stdout, "read index successfully\n");
+
+	//read data
+	post_read(res, 1);
+	if (poll_completion(res)) {
+		fprintf(stderr, "poll completion failed\n");
+		return 1;
+	}
+	fprintf(stdout, "read data successfully\n");
+
+	//cal index
+	int h = cal_hash_index(key);
+	struct hashtable *ht = (struct hashtable *)res->index_buf;
+	memcpy(res->data_buf + loc, value, strlen(value)); //
+	ht->exist[h] = 1;
+	ht->location[h] = loc;
+	ht->len[h] = strlen(value);
+	memcpy(ht->key[h], key, strlen(key));
+	//write data
+	post_write(res, 1);
+	if (poll_completion(res)) {
+		fprintf(stderr, "poll completion failed\n");
+		return 1;
+	}
+	fprintf(stdout, "write data successfully\n");
+
+	//write index
+	post_write(res, 0);
+	if (poll_completion(res)) {
+		fprintf(stderr, "poll completion failed\n");
+		return 1;
+	}
+	fprintf(stdout, "write index successfully\n");
+
+	//change loc
+	loc += strlen(value);
+	return 0;
+}
+
+int get(struct resources * res, char *key, char *value){
+	memset(res->data_buf, 0, total_size);
+	memset(res->index_buf, 0, sizeof(struct hashtable));
+
+	//read index
+	post_read(res, 0);
+	if (poll_completion(res)) {
+		fprintf(stderr, "poll completion failed\n");
+		return 1;
+	}
+	fprintf(stdout, "read index successfully\n");
+
+	//read data
+	post_read(res, 1);
+	if (poll_completion(res)) {
+		fprintf(stderr, "poll completion failed\n");
+		return 1;
+	}
+	fprintf(stdout, "read data successfully\n");
+
+	//cal index
+	int h = cal_hash_index(key);
+	struct hashtable *ht = (struct hashtable *)res->index_buf;
+	if(ht->exist[h] == 0){
+		fprintf(stdout, "not find this  K/V\n");
+		return 0;
+	}
+	memcpy(value, res->data_buf + ht->location[h], ht->len[h]);
+	value[ht->len[h]] = 0;
+	fprintf(stdout, "find this K/V, value is : %s\n", value);
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	struct resources 	res;
@@ -581,61 +661,60 @@ int main(int argc, char *argv[])
 	//kv
 	char key[8] = "msn";
 	char value[1024] = "1234567890";
-	//read index
 
-	post_read(&res, 0);
-	if (poll_completion(&res)) {
-		fprintf(stderr, "poll completion failed\n");
+	if(put(&res, key, value)){
+		fprintf(stderr, "put K/V error\n");
 		return 1;
 	}
-	fprintf(stdout, "read index successfully\n");
 
-	//read data
-	post_read(&res, 1);
-	if (poll_completion(&res)) {
-		fprintf(stderr, "poll completion failed\n");
-		return 1;
-	}
-	fprintf(stdout, "read data successfully\n");
-
-	//cal index
-	int h = cal_hash_index(key);
-	struct hashtable *ht = (struct hashtable *)res.index_buf;
-	memcpy(res.data_buf + loc, value, strlen(value)); //
-	ht->exist[h] = 1;
-	ht->location[h] = loc;
-	memcpy(ht->key[h], key, strlen(key));
-	//write data
-	post_write(&res, 1);
-	if (poll_completion(&res)) {
-		fprintf(stderr, "poll completion failed\n");
-		return 1;
-	}
-	fprintf(stdout, "write data successfully\n");
-
-	//write index
-	post_write(&res, 0);
-	if (poll_completion(&res)) {
-		fprintf(stderr, "poll completion failed\n");
-		return 1;
-	}
-	fprintf(stdout, "write index successfully\n");
-
-	//change loc
-	loc += strlen(value);
-
-	//read data
-	memset(res.data_buf, 0, total_size);
-	post_read(&res, 1);
-	if (poll_completion(&res)) {
-		fprintf(stderr, "poll completion failed\n");
-		return 1;
-	}
-	//read value
 	char vv[100];
-	memcpy(vv, res.data_buf, strlen(value));
-	vv[strlen(value)] = 0;
-	printf("get the value: %s\n", vv);
+	if(get(&res, key, vv)){
+		fprintf(stderr, "get K/V error\n");
+		return 1;
+	}
+
+	// post_read(&res, 0);
+	// if (poll_completion(&res)) {
+	// 	fprintf(stderr, "poll completion failed\n");
+	// 	return 1;
+	// }
+	// fprintf(stdout, "read index successfully\n");
+
+	// //read data
+	// post_read(&res, 1);
+	// if (poll_completion(&res)) {
+	// 	fprintf(stderr, "poll completion failed\n");
+	// 	return 1;
+	// }
+	// fprintf(stdout, "read data successfully\n");
+
+	// //cal index
+	// int h = cal_hash_index(key);
+	// struct hashtable *ht = (struct hashtable *)res.index_buf;
+	// memcpy(res.data_buf + loc, value, strlen(value)); //
+	// ht->exist[h] = 1;
+	// ht->location[h] = loc;
+	// ht->len[h] = strlen(value);
+	// memcpy(ht->key[h], key, strlen(key));
+	// //write data
+	// post_write(&res, 1);
+	// if (poll_completion(&res)) {
+	// 	fprintf(stderr, "poll completion failed\n");
+	// 	return 1;
+	// }
+	// fprintf(stdout, "write data successfully\n");
+
+	// //write index
+	// post_write(&res, 0);
+	// if (poll_completion(&res)) {
+	// 	fprintf(stderr, "poll completion failed\n");
+	// 	return 1;
+	// }
+	// fprintf(stdout, "write index successfully\n");
+
+	// //change loc
+	// loc += strlen(value);
+
 
 	if (sock_sync_ready(res.sock, !config.server_name)) {
 		fprintf(stderr, "sync before end of test\n");
